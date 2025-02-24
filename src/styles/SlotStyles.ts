@@ -1,5 +1,6 @@
 import styled from "styled-components";
 import { Sprite } from "@pixi/react";
+import { TextStyle } from "@pixi/text";
 
 
 
@@ -93,3 +94,22 @@ export const SpinButton = styled.button`
     background-color: #ffaa00;
   }
 `;
+
+export const multiplierTextStyle = new TextStyle({
+  fontFamily: "Keep On Truckin",
+  fontSize: 34,
+  fill: "#ffffff",
+  stroke: "#000000",         // Cor da borda
+  strokeThickness: 1,        // Largura da borda
+  dropShadow: true,          // Ativa a sombra
+  dropShadowColor: "#000000",// Cor da sombra
+  dropShadowBlur: 4,         // Desfoque da sombra
+  dropShadowAngle: Math.PI / 6, // Ângulo da sombra (30°)
+  dropShadowDistance: 2,     // Distância da sombra
+});
+
+export const currencyTextStyle = new TextStyle({
+  fontFamily: "Roboto",
+  fontSize: 16,
+  fill: "#08472d",
+});
