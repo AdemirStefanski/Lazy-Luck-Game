@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from "react";
 import { Stage, Container, Sprite, Text, Graphics } from "@pixi/react";
-import { Graphics as PixiGraphics } from "pixi.js";
 import { useDispatch, useSelector } from "react-redux";
 import { spinReels } from "../store/gameSlice";
 import { symbols } from "../gameLogic";
@@ -14,16 +13,12 @@ const BASE_HEIGHT = 840;
 const REEL_WIDTH = 478;
 const REEL_HEIGHT = 416;
 const REEL_Y_POSITION = 200;
-const REEL_COLUMNS = 3;
-const REEL_ROWS = 3;
 const SYMBOL_SIZE = 115;
 const HORIZONTAL_SPACING = 35;
 const VERTICAL_SPACING = 5;
 
-const SYMBOL_AREA_WIDTH =
-  SYMBOL_SIZE * REEL_COLUMNS + HORIZONTAL_SPACING * (REEL_COLUMNS - 1);
-const SYMBOL_AREA_HEIGHT =
-  SYMBOL_SIZE * REEL_ROWS + VERTICAL_SPACING * (REEL_ROWS - 1);
+const SYMBOL_AREA_WIDTH = SYMBOL_SIZE * 3 + HORIZONTAL_SPACING * 2;
+const SYMBOL_AREA_HEIGHT = SYMBOL_SIZE * 3 + VERTICAL_SPACING * 2;
 
 const MASCOT_WIDTH = 120;
 const MASCOT_HEIGHT = 120;
@@ -36,8 +31,7 @@ const PANEL_Y_POSITION = REEL_Y_POSITION + REEL_HEIGHT + MULTIPLIER_HEIGHT;
 
 const RECTANGLE_MARGIN = 9;
 const RECTANGLE_SPACING = 4;
-const rectangleWidth =
-  (REEL_WIDTH - 2 * RECTANGLE_MARGIN - 2 * RECTANGLE_SPACING) / 3;
+const rectangleWidth = (REEL_WIDTH - 2 * RECTANGLE_MARGIN - 2 * RECTANGLE_SPACING) / 3;
 const rectangleHeight = PANEL_HEIGHT / 2;
 const ICON_SIZE = 24;
 
@@ -55,13 +49,18 @@ const multiplierTextStyle = new TextStyle({
 });
 
 // Função para desenhar um retângulo arredondado
-// Removemos a tipagem estrita para evitar conflitos
-const drawRoundedRect = (g: any) => {
+function drawRoundedRect(g: any) {
   g.clear();
   g.beginFill(0xc8cbd3);
   g.drawRoundedRect(0, 0, rectangleWidth, rectangleHeight, 8);
   g.endFill();
-};
+}
+
+// Função auxiliar para obter um símbolo aleatório
+function getRandomSymbol(): string {
+  const keys = Object.keys(symbols);
+  return keys[Math.floor(Math.random() * keys.length)];
+}
 
 const SlotMachine: React.FC = () => {
   const dispatch = useDispatch();
@@ -69,10 +68,15 @@ const SlotMachine: React.FC = () => {
   const [loadedTextures, setLoadedTextures] = useState<Record<string, Texture>>({});
   const [scale, setScale] = useState(1);
 
+  // Estado local para os reels exibidos durante a rotação.
+  const [animatedReels, setAnimatedReels] = useState<string[][]>(reels);
+  const [isSpinning, setIsSpinning] = useState(false);
+  // Estado para gerar chaves únicas a cada spin
+  const [spinCounter, setSpinCounter] = useState(0);
+
   useEffect(() => {
     const loadTextures = async () => {
       const textureCache: Record<string, Texture> = {};
-      // Carrega os símbolos do reel
       for (const [key, path] of Object.entries(symbols)) {
         textureCache[key] = await Assets.load(path);
       }
@@ -85,10 +89,8 @@ const SlotMachine: React.FC = () => {
       textureCache["walletIcon"] = await Assets.load("/assets/bottom_panel/wallet_icon.png");
       textureCache["coinIcon"] = await Assets.load("/assets/bottom_panel/coin_icon.png");
       textureCache["winIcon"] = await Assets.load("/assets/bottom_panel/win_icon.png");
-
       setLoadedTextures(textureCache);
     };
-
     loadTextures();
   }, []);
 
@@ -97,13 +99,61 @@ const SlotMachine: React.FC = () => {
       const newScale = window.innerHeight / BASE_HEIGHT;
       setScale(newScale);
     };
-
     window.addEventListener("resize", updateScale);
     updateScale();
     return () => window.removeEventListener("resize", updateScale);
   }, []);
 
+  // Anima o reel em duas fases e, ao final, define o resultado final
+  const animateReel = (reelIndex: number, finalReel: string[]) => {
+    // Fase 1: atualizações rápidas (50ms) por 2s
+    const fastInterval = setInterval(() => {
+      setAnimatedReels((prev) => {
+        const newReels = [...prev];
+        newReels[reelIndex] = Array.from({ length: 3 }, getRandomSymbol);
+        return newReels;
+      });
+    }, 50);
+
+    setTimeout(() => {
+      clearInterval(fastInterval);
+      // Fase 2: atualizações mais lentas (200ms) por 2s
+      const slowInterval = setInterval(() => {
+        setAnimatedReels((prev) => {
+          const newReels = [...prev];
+          newReels[reelIndex] = Array.from({ length: 3 }, getRandomSymbol);
+          return newReels;
+        });
+      }, 200);
+
+      setTimeout(() => {
+        clearInterval(slowInterval);
+        // Define o reel final
+        setAnimatedReels((prev) => {
+          const newReels = [...prev];
+          newReels[reelIndex] = finalReel;
+          return newReels;
+        });
+      }, 2000);
+    }, 2000);
+  };
+
+  useEffect(() => {
+    if (isSpinning && reels && reels.length) {
+      // Reinicia o estado local para evitar sobreposição
+      setAnimatedReels(Array(reels.length).fill(Array(3).fill("")));
+      reels.forEach((finalReel: string[], index: number) => {
+        animateReel(index, finalReel);
+      });
+      setSpinCounter((prev) => prev + 1);
+      setIsSpinning(false);
+    } else {
+      setAnimatedReels(reels);
+    }
+  }, [reels, isSpinning]);
+
   const handleSpin = () => {
+    setIsSpinning(true);
     dispatch(spinReels());
   };
 
@@ -149,14 +199,14 @@ const SlotMachine: React.FC = () => {
               (REEL_HEIGHT - SYMBOL_AREA_HEIGHT) / 2,
             ]}
           >
-            {reels.map((reel: string[], reelIndex: number) => (
+            {animatedReels.map((reel: string[], reelIndex: number) => (
               <Container
-                key={`reel-${reel.join("-")}`}
+                key={`reel-${spinCounter}-${reelIndex}`}
                 position={[reelIndex * (SYMBOL_SIZE + HORIZONTAL_SPACING), 0]}
               >
                 {reel.map((symbol, symbolIndex) => (
                   <Sprite
-                    key={`symbol-${symbol}-${symbolIndex}`}
+                    key={`symbol-${spinCounter}-${reelIndex}-${symbolIndex}`}
                     texture={loadedTextures[symbol]}
                     position={[0, symbolIndex * (SYMBOL_SIZE + VERTICAL_SPACING)]}
                     width={SYMBOL_SIZE}
@@ -197,27 +247,34 @@ const SlotMachine: React.FC = () => {
               height={PANEL_HEIGHT}
             />
           )}
-          {/* Container para os retângulos; centraliza verticalmente os retângulos no painel */}
           <Container position={[0, (PANEL_HEIGHT - rectangleHeight) / 2]}>
             {["wallet", "coin", "win"].map((type, index) => {
               const xRect = RECTANGLE_MARGIN + index * (rectangleWidth + RECTANGLE_SPACING);
               let iconTexture;
-              if (type === "wallet") iconTexture = loadedTextures["walletIcon"];
-              else if (type === "coin") iconTexture = loadedTextures["coinIcon"];
-              else if (type === "win") iconTexture = loadedTextures["winIcon"];
+              let textValue = "R$ 0,00";
+              if (type === "wallet") {
+                iconTexture = loadedTextures["walletIcon"];
+                textValue = `R$ ${balance}`;
+              } else if (type === "coin") {
+                iconTexture = loadedTextures["coinIcon"];
+                textValue = `R$ ${bet}`;
+              } else if (type === "win") {
+                iconTexture = loadedTextures["winIcon"];
+                textValue = `R$ ${winnings}`;
+              }
               return (
                 <Container key={`rect-${type}`} position={[xRect, 0]}>
                   <Graphics draw={drawRoundedRect} />
                   {iconTexture && (
                     <Sprite
-                      texture={iconTexture}
+                      texture={loadedTextures[`${type}Icon`]}
                       position={[12, (rectangleHeight - ICON_SIZE) / 2]}
                       width={ICON_SIZE}
                       height={ICON_SIZE}
                     />
                   )}
                   <Text
-                    text="R$ 0,00"
+                    text={textValue}
                     anchor={[0, 0.5]}
                     x={12 + ICON_SIZE + 8}
                     y={rectangleHeight / 2}
